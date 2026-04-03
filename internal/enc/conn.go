@@ -116,8 +116,8 @@ func newAEAD(key, random []byte) (cipher.AEAD, error) {
 	var err error
 	h := hmac.New(sha256.New, key)
 	h.Write(random)
-	aeadKey := h.Sum(nil)
-	block, err := aes.NewCipher(aeadKey)
+	gcmKey := h.Sum(nil)
+	block, err := aes.NewCipher(gcmKey)
 	if err != nil {
 		return nil, err
 	}
