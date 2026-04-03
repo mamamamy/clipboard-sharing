@@ -55,10 +55,10 @@ func (c *Conn) Read(b []byte) (int, error) {
 		return 0, err
 	}
 	buf, err = decrypt(c.key, buf[:l], c.readSeq)
-	c.readSeq++
 	if err != nil {
 		return 0, err
 	}
+	c.readSeq++
 	n = copy(b, buf)
 	c.decBuf = buf[n:]
 	return n, nil
@@ -69,10 +69,10 @@ func (c *Conn) Write(b []byte) (int, error) {
 	for len(b) > 0 {
 		wn := min(len(b), 4096-2-32-16)
 		ciphertext, err := encrypt(c.key, b[:wn], c.writeSeq)
-		c.writeSeq++
 		if err != nil {
 			return n, err
 		}
+		c.writeSeq++
 		lb := make([]byte, 2)
 		binary.BigEndian.PutUint16(lb, uint16(len(ciphertext)))
 		_, err = c.Conn.Write(lb)
