@@ -13,6 +13,17 @@ import (
 	"golang.org/x/crypto/argon2"
 )
 
+func NewKey(password string) []byte {
+	return argon2.IDKey(
+		[]byte(password),
+		[]byte("clipboard-sharing"),
+		3,
+		64*1024,
+		4,
+		32,
+	)
+}
+
 func main() {
 	var err error
 
@@ -23,7 +34,7 @@ func main() {
 		log.Fatalf("❌ failed to load config: %v", err)
 	}
 
-	key := argon2.IDKey([]byte(cfg.Password), []byte("clipboard-sharing"), 3, 64*1024, 4, 32)
+	key := NewKey(cfg.Password)
 
 	rpcServer := rpc.NewServer(cfg.Bind, key)
 	err = rpcServer.Register(&service.RPCClipboardService{})

@@ -4,17 +4,10 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"encoding/base64"
 	"time"
 
 	"golang.design/x/clipboard"
 )
-
-type Digest []byte
-
-func (d Digest) String() string {
-	return base64.RawURLEncoding.EncodeToString(d)
-}
 
 type Kind string
 
@@ -37,7 +30,7 @@ const (
 type Info struct {
 	Kind   Kind
 	Data   []byte
-	Digest Digest
+	Digest []byte
 }
 
 func Watch(ctx context.Context) chan *Info {
@@ -52,7 +45,7 @@ func Watch(ctx context.Context) chan *Info {
 	c := make(chan *Info)
 
 	go func(chan *Info) {
-		var latestDigest Digest
+		var latestDigest []byte
 		h := sha256.New()
 
 		for {

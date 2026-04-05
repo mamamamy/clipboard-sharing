@@ -26,7 +26,7 @@ var LocalClipboardService = func() *localClipboardService {
 	return c
 }()
 
-func (c *localClipboardService) WaitLatestDigest() clipboard.Digest {
+func (c *localClipboardService) WaitLatestDigest() []byte {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	version := c.version
@@ -36,7 +36,7 @@ func (c *localClipboardService) WaitLatestDigest() clipboard.Digest {
 	digest := c.info.Digest
 	return digest
 }
-func (c *localClipboardService) CompareAndGetInfo(digest clipboard.Digest) *clipboard.Info {
+func (c *localClipboardService) CompareAndGetInfo(digest []byte) *clipboard.Info {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	if bytes.Equal(digest, c.info.Digest) {
@@ -45,7 +45,7 @@ func (c *localClipboardService) CompareAndGetInfo(digest clipboard.Digest) *clip
 	return c.info
 }
 
-func (c *localClipboardService) GetDigest() clipboard.Digest {
+func (c *localClipboardService) GetDigest() []byte {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	return c.info.Digest
@@ -71,12 +71,12 @@ func (c *localClipboardService) PushInfo(info *clipboard.Info) {
 
 type RPCClipboardService struct{}
 
-func (c *RPCClipboardService) WaitLatestDigest(_ *struct{}, digest *clipboard.Digest) error {
+func (c *RPCClipboardService) WaitLatestDigest(_ *struct{}, digest *[]byte) error {
 	*digest = LocalClipboardService.WaitLatestDigest()
 	return nil
 }
 
-func (c *RPCClipboardService) CompareAndGetInfo(digest *clipboard.Digest, info *clipboard.Info) error {
+func (c *RPCClipboardService) CompareAndGetInfo(digest *[]byte, info *clipboard.Info) error {
 	r := LocalClipboardService.CompareAndGetInfo(*digest)
 	if r != nil {
 		*info = *r
@@ -93,8 +93,8 @@ type remoteClipboardService struct{}
 
 var RemoteClipboardService = &remoteClipboardService{}
 
-func (c *remoteClipboardService) WaitLatestDigest(client *rpc.Client) (clipboard.Digest, error) {
-	var digest clipboard.Digest
+func (c *remoteClipboardService) WaitLatestDigest(client *rpc.Client) ([]byte, error) {
+	var digest []byte
 	err := client.Call(RPCNameClipboardService+".WaitLatestDigest", &struct{}{}, &digest)
 	if err != nil {
 		return nil, err
@@ -102,7 +102,7 @@ func (c *remoteClipboardService) WaitLatestDigest(client *rpc.Client) (clipboard
 	return digest, nil
 }
 
-func (c *remoteClipboardService) CompareAndGetInfo(client *rpc.Client, digest clipboard.Digest) (*clipboard.Info, error) {
+func (c *remoteClipboardService) CompareAndGetInfo(client *rpc.Client, digest []byte) (*clipboard.Info, error) {
 	var info clipboard.Info
 	err := client.Call(RPCNameClipboardService+".CompareAndGetInfo", &digest, &info)
 	if err != nil {
