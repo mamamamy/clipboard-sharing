@@ -9,17 +9,25 @@ import (
 )
 
 type Client struct {
-	addr   string
+	addr   *net.TCPAddr
 	key    []byte
 	client *rpc.Client
 	lock   sync.Mutex
 }
 
-func NewClient(addr string, key []byte) *Client {
-	return &Client{
-		addr: addr,
-		key:  key,
+func NewClient(addr string, key []byte) (*Client, error) {
+	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
+	if err != nil {
+		return nil, err
 	}
+	return &Client{
+		addr: tcpAddr,
+		key:  key,
+	}, nil
+}
+
+func (c *Client) Addr() net.Addr {
+	return c.addr
 }
 
 func (c *Client) getClient() (*rpc.Client, error) {
@@ -29,10 +37,11 @@ func (c *Client) getClient() (*rpc.Client, error) {
 	if c.client != nil {
 		return c.client, nil
 	}
-	conn, err := net.Dial("tcp", c.addr)
+	tcpConn, err := net.DialTCP(c.addr.Network(), nil, c.addr)
 	if err != nil {
 		return nil, err
 	}
+	conn := net.Conn(tcpConn)
 	if c.key != nil {
 		conn = enc.NewEncConn(conn, c.key)
 	}

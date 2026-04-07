@@ -7,39 +7,27 @@ import (
 	"net/rpc"
 )
 
-type serverAddr struct {
-	network string
-	addr    string
-}
-
-func (a *serverAddr) Network() string {
-	return "tcp"
-}
-
-func (a *serverAddr) String() string {
-	return a.addr
-}
-
 type Server struct {
-	addr      serverAddr
+	addr      *net.TCPAddr
 	key       []byte
 	rpcServer *rpc.Server
-	listener  net.Listener
+	listener  *net.TCPListener
 }
 
-func NewServer(addr string, key []byte) *Server {
+func NewServer(addr string, key []byte) (*Server, error) {
+	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
+	if err != nil {
+		return nil, err
+	}
 	return &Server{
-		addr: serverAddr{
-			network: "tcp",
-			addr:    addr,
-		},
+		addr:      tcpAddr,
 		key:       key,
 		rpcServer: rpc.NewServer(),
-	}
+	}, nil
 }
 
 func (s *Server) Addr() net.Addr {
-	return &s.addr
+	return s.addr
 }
 
 func (s *Server) Register(srv any) error {
@@ -47,7 +35,7 @@ func (s *Server) Register(srv any) error {
 }
 
 func (s *Server) ListenAndServe() error {
-	listener, err := net.Listen(s.addr.network, s.addr.addr)
+	listener, err := net.ListenTCP(s.addr.Network(), s.addr)
 	if err != nil {
 		return err
 	}

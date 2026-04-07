@@ -1,9 +1,9 @@
 package clipboard
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"time"
 
 	"golang.design/x/clipboard"
@@ -30,7 +30,12 @@ const (
 type Info struct {
 	Kind   Kind
 	Data   []byte
-	Digest []byte
+	Digest string
+}
+
+func (i *Info) CalcDigest() string {
+	i.Digest = calcDigest(i.Kind, i.Data)
+	return i.Digest
 }
 
 func Watch(ctx context.Context) chan *Info {
@@ -44,17 +49,16 @@ func Watch(ctx context.Context) chan *Info {
 
 	c := make(chan *Info)
 
-	go func(chan *Info) {
-		var latestDigest []byte
-		h := sha256.New()
+	go func() {
+		var lastDigest string
 
 		for {
 			var kind Kind
 			var data []byte
 
 			select {
-			case <-time.After(1 * time.Second):
-				kind, data = Read()
+			case <-time.After(200 * time.Millisecond):
+				kind, data = ReadRaw()
 			case data = <-watchTextChan:
 				kind = KindText
 			case data = <-watchImageChan:
@@ -64,14 +68,16 @@ func Watch(ctx context.Context) chan *Info {
 				return
 			}
 
-			h.Reset()
-			h.Write(data)
-			digest := h.Sum(nil)
-
-			if bytes.Equal(digest, latestDigest) {
+			if kind == KindNone {
 				continue
 			}
-			latestDigest = digest
+
+			digest := calcDigest(kind, data)
+
+			if digest == lastDigest {
+				continue
+			}
+			lastDigest = digest
 
 			c <- &Info{
 				Kind:   kind,
@@ -79,15 +85,55 @@ func Watch(ctx context.Context) chan *Info {
 				Digest: digest,
 			}
 		}
-	}(c)
+	}()
+
 	return c
 }
 
+func WatchWithWrite(ctx context.Context) (in chan *Info, out chan *Info) {
+	in = make(chan *Info)
+	out = make(chan *Info)
+	watchChan := Watch(ctx)
+	go func() {
+		var lastDigest string
+		var ok bool
+		var info *Info
+		for {
+			select {
+			case info, ok = <-watchChan:
+				if !ok {
+					return
+				}
+				digest := info.Digest
+				if digest == lastDigest {
+					continue
+				}
+				lastDigest = digest
+				out <- info
+			case info = <-in:
+				lastDigest = info.Digest
+				Write(info)
+			}
+		}
+	}()
+	return in, out
+}
+
+func calcDigest(kind Kind, data []byte) string {
+	h := sha256.New()
+	h.Write([]byte(kind))
+	h.Write(data)
+	return base64.RawURLEncoding.EncodeToString(h.Sum(nil))
+}
+
 func Write(info *Info) {
+	if info.Kind.ClipboardFormat() == -1 {
+		return
+	}
 	clipboard.Write(info.Kind.ClipboardFormat(), info.Data)
 }
 
-func Read() (Kind, []byte) {
+func ReadRaw() (Kind, []byte) {
 	var data []byte
 
 	data = clipboard.Read(clipboard.FmtText)
@@ -101,4 +147,16 @@ func Read() (Kind, []byte) {
 	}
 
 	return KindNone, nil
+}
+
+func Read() *Info {
+	kind, data := ReadRaw()
+	if kind == KindNone {
+		return nil
+	}
+	return &Info{
+		Data:   data,
+		Digest: calcDigest(kind, data),
+		Kind:   kind,
+	}
 }
