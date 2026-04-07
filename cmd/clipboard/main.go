@@ -32,14 +32,8 @@ type SyncManager struct {
 	lock    sync.Mutex
 }
 
-func (sm *SyncManager) AddLocalUpdate(digest string) {
-	sm.lock.Lock()
-	defer sm.lock.Unlock()
-	m := &Meta{
-		Digest:  digest,
-		Version: sm.version.Add(1),
-	}
-	sm.updates = append(sm.updates, m)
+func (sm *SyncManager) AddLocalUpdate() {
+	sm.version.Add(1)
 }
 
 func (sm *SyncManager) AddRemoteUpdate(m *Meta) bool {
