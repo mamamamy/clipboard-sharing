@@ -2,8 +2,10 @@ package main
 
 import (
 	"clipboard/internal/clipboard"
-	"context"
+	"crypto/rand"
+	"crypto/rsa"
 	"fmt"
+	"net/rpc"
 	"sync"
 
 	"golang.org/x/crypto/argon2"
@@ -26,6 +28,7 @@ type Meta struct {
 }
 
 type SyncManager struct {
+	latest  *Meta
 	updates []*Meta
 	version int64
 	lock    sync.RWMutex
@@ -44,6 +47,7 @@ func (sm *SyncManager) AddLocalUpdate(digest string) *Meta {
 		Version: sm.version,
 	}
 	sm.updates = append(sm.updates, m)
+	sm.latest = m
 	return m
 }
 
@@ -55,16 +59,14 @@ func (sm *SyncManager) AddRemoteUpdate(m *Meta) bool {
 	}
 	sm.version = m.Version
 	sm.updates = append(sm.updates, m)
+	sm.latest = m
 	return true
 }
 
 func (sm *SyncManager) GetLatestMeta() *Meta {
 	sm.lock.RLock()
 	defer sm.lock.RUnlock()
-	if len(sm.updates) == 0 {
-		return nil
-	}
-	return sm.updates[len(sm.updates)-1]
+	return sm.latest
 }
 
 func (sm *SyncManager) TruncateByDigest(digest string) bool {
@@ -79,31 +81,22 @@ func (sm *SyncManager) TruncateByDigest(digest string) bool {
 	return false
 }
 
-type LocalClipboardService struct {
-	sm    *SyncManager
-	cache *clipboard.Cache
+type ClipboardService struct {
+	sm      *SyncManager
+	cache   *clipboard.Cache
+	clients []*rpc.Client
 }
 
-func NewClipboardService() *LocalClipboardService {
-	return &LocalClipboardService{
+func NewClipboardService(peer []string) *ClipboardService {
+	return &ClipboardService{
 		sm:    NewSyncManager(),
 		cache: clipboard.NewCache(32),
 	}
 }
 
-func (c *LocalClipboardService) PushMeta(m *Meta) bool {
+func (c *ClipboardService) PushMeta(m *Meta) bool {
 	return c.sm.AddRemoteUpdate(m)
 }
 
 func main() {
-	sm := NewSyncManager()
-
-	_, out := clipboard.WatchWithWrite(context.Background())
-
-	for {
-		for info := range out {
-			meta := sm.AddLocalUpdate(info.Digest)
-			fmt.Println(meta)
-		}
-	}
 }
