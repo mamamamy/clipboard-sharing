@@ -2,9 +2,6 @@ package main
 
 import (
 	"clipboard/internal/clipboard"
-	"crypto/rand"
-	"crypto/rsa"
-	"fmt"
 	"net/rpc"
 	"sync"
 
