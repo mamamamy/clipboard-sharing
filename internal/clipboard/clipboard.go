@@ -44,13 +44,13 @@ func Watch(ctx context.Context) chan *Info {
 		panic(err)
 	}
 
-	watchTextChan := clipboard.Watch(ctx, clipboard.FmtText)
-	watchImageChan := clipboard.Watch(ctx, clipboard.FmtImage)
-
 	c := make(chan *Info)
 
-	go func() {
+	go func(c chan *Info) {
 		var lastDigest string
+
+		watchTextChan := clipboard.Watch(ctx, clipboard.FmtText)
+		watchImageChan := clipboard.Watch(ctx, clipboard.FmtImage)
 
 		for {
 			var kind Kind
@@ -85,7 +85,7 @@ func Watch(ctx context.Context) chan *Info {
 				Digest: digest,
 			}
 		}
-	}()
+	}(c)
 
 	return c
 }
@@ -93,11 +93,11 @@ func Watch(ctx context.Context) chan *Info {
 func WatchWithWrite(ctx context.Context) (in chan *Info, out chan *Info) {
 	in = make(chan *Info)
 	out = make(chan *Info)
-	watchChan := Watch(ctx)
-	go func() {
+	go func(in, out chan *Info) {
 		var lastDigest string
 		var ok bool
 		var info *Info
+		watchChan := Watch(ctx)
 		for {
 			select {
 			case info, ok = <-watchChan:
@@ -115,7 +115,7 @@ func WatchWithWrite(ctx context.Context) (in chan *Info, out chan *Info) {
 				Write(info)
 			}
 		}
-	}()
+	}(in, out)
 	return in, out
 }
 

@@ -48,14 +48,3 @@ func (c *Cache) Put(info *Info) {
 
 	c.data = append(c.data, info)
 }
-
-func (c *Cache) Latest() *Info {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-
-	if len(c.data) > 0 {
-		return c.data[len(c.data)-1]
-	}
-
-	return nil
-}
