@@ -1,9 +1,14 @@
 package main
 
 import (
-	"clipboard/internal/clipboard"
-	"net/rpc"
+	"clipboard/internal/config"
+	"clipboard/internal/rpc"
+	"clipboard/internal/service"
+	"context"
+	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 
 	"golang.org/x/crypto/argon2"
 )
@@ -11,7 +16,7 @@ import (
 func NewKey(password string) []byte {
 	return argon2.IDKey(
 		[]byte(password),
-		[]byte("clipboard-sharing"),
+		[]byte("clipboard-sharing-service"),
 		3,
 		64*1024,
 		4,
@@ -19,81 +24,48 @@ func NewKey(password string) []byte {
 	)
 }
 
-type Meta struct {
-	Digest  string
-	Version int64
-}
-
-type SyncManager struct {
-	latest  *Meta
-	updates []*Meta
-	version int64
-	lock    sync.RWMutex
-}
-
-func NewSyncManager() *SyncManager {
-	return &SyncManager{}
-}
-
-func (sm *SyncManager) AddLocalUpdate(digest string) *Meta {
-	sm.lock.Lock()
-	defer sm.lock.Unlock()
-	sm.version++
-	m := &Meta{
-		Digest:  digest,
-		Version: sm.version,
-	}
-	sm.updates = append(sm.updates, m)
-	sm.latest = m
-	return m
-}
-
-func (sm *SyncManager) AddRemoteUpdate(m *Meta) bool {
-	sm.lock.Lock()
-	defer sm.lock.Unlock()
-	if sm.version >= m.Version {
-		return false
-	}
-	sm.version = m.Version
-	sm.updates = append(sm.updates, m)
-	sm.latest = m
-	return true
-}
-
-func (sm *SyncManager) GetLatestMeta() *Meta {
-	sm.lock.RLock()
-	defer sm.lock.RUnlock()
-	return sm.latest
-}
-
-func (sm *SyncManager) TruncateByDigest(digest string) bool {
-	sm.lock.Lock()
-	defer sm.lock.Unlock()
-	for i := len(sm.updates) - 1; i >= 0; i-- {
-		if sm.updates[i].Digest == digest {
-			sm.updates = sm.updates[:i]
-			return true
-		}
-	}
-	return false
-}
-
-type ClipboardService struct {
-	sm      *SyncManager
-	cache   *clipboard.Cache
-	clients []*rpc.Client
-}
-
-func NewClipboardService(peer []string) *ClipboardService {
-	return &ClipboardService{
-		sm:    NewSyncManager(),
-		cache: clipboard.NewCache(32),
-	}
-}
-
-func (c *ClipboardService) PushMeta(m *Meta) bool {
-	return c.sm.AddRemoteUpdate(m)
-}
-
 func main() {
+	cfg, err := config.Load("config.json")
+	if err != nil {
+		panic(err)
+	}
+	key := NewKey(cfg.Password)
+	localService, err := service.NewLocal(cfg.Peers, key)
+	if err != nil {
+		panic(err)
+	}
+	rpcServer, err := rpc.NewServer(cfg.Bind, key)
+	if err != nil {
+		panic(err)
+	}
+	err = rpcServer.Register(service.NewRPC(localService))
+	if err != nil {
+		panic(err)
+	}
+
+	wg := sync.WaitGroup{}
+	wg.Add(2)
+	ctx, stop := context.WithCancel(context.Background())
+	go func() {
+		localService.Start(ctx)
+		wg.Done()
+	}()
+	<-localService.Ready()
+	go func() {
+		err := rpcServer.ListenAndServe()
+		if err != nil {
+			panic(err)
+		}
+		wg.Done()
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	stop()
+	localService.Stop()
+	_ = rpcServer.Close()
+
+	wg.Wait()
 }

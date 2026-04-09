@@ -24,13 +24,6 @@ type Conn struct {
 	readSeq  int64
 }
 
-func NewEncConn(conn net.Conn, key []byte) net.Conn {
-	return &Conn{
-		Conn: conn,
-		key:  key,
-	}
-}
-
 func (c *Conn) Read(b []byte) (int, error) {
 	var n int
 	var err error
@@ -87,6 +80,13 @@ func (c *Conn) Write(b []byte) (int, error) {
 		b = b[wn:]
 	}
 	return n, nil
+}
+
+func NewEncConn(conn net.Conn, key []byte) net.Conn {
+	return &Conn{
+		Conn: conn,
+		key:  key,
+	}
 }
 
 func encrypt(key, b []byte, seq int64) ([]byte, error) {

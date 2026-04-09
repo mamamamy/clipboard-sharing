@@ -26,6 +26,18 @@ func NewClient(addr string, key []byte) (*Client, error) {
 	}, nil
 }
 
+func NewClients(addrs []string, key []byte) ([]*Client, error) {
+	var clients []*Client
+	for _, v := range addrs {
+		client, err := NewClient(v, key)
+		if err != nil {
+			return nil, err
+		}
+		clients = append(clients, client)
+	}
+	return clients, nil
+}
+
 func (c *Client) Addr() net.Addr {
 	return c.addr
 }
@@ -68,4 +80,15 @@ func (c *Client) Call(serviceMethod string, args any, reply any) error {
 		}
 	}
 	return err
+}
+
+func (c *Client) Close() error {
+	c.lock.Lock()
+	client := c.client
+	c.client = nil
+	c.lock.Unlock()
+	if client != nil {
+		return client.Close()
+	}
+	return nil
 }

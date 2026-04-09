@@ -31,10 +31,11 @@ func (s *Server) Addr() net.Addr {
 }
 
 func (s *Server) RegisterName(srv any, name string) error {
-	if name == "" {
-		return s.rpcServer.Register(srv)
-	}
 	return s.rpcServer.RegisterName(name, srv)
+}
+
+func (s *Server) Register(srv any) error {
+	return s.rpcServer.Register(srv)
 }
 
 func (s *Server) ListenAndServe() error {

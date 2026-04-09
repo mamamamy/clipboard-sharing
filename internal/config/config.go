@@ -7,7 +7,7 @@ import (
 
 type Config struct {
 	Bind     string   `json:"Bind"`
-	Peer     []string `json:"Peer"`
+	Peers    []string `json:"Peers"`
 	Password string   `json:"Password"`
 }
 

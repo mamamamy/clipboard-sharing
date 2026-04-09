@@ -13,7 +13,7 @@ const (
 
 var DefaultAlgorithm = AES
 
-var ErrUnknownInstanceName = errors.New("csprng: unknown instance name")
+var ErrUnknownInstanceName = errors.New("rand: unknown instance name")
 
 type Instance interface {
 	NewReader() io.Reader

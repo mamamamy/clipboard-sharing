@@ -27,26 +27,26 @@ const (
 	KindText  Kind = "TEXT"
 )
 
-type Info struct {
+type Data struct {
 	Kind   Kind
 	Data   []byte
 	Digest string
 }
 
-func (i *Info) CalcDigest() string {
-	i.Digest = calcDigest(i.Kind, i.Data)
-	return i.Digest
+func (d *Data) CalcDigest() string {
+	d.Digest = calcDigest(d.Kind, d.Data)
+	return d.Digest
 }
 
-func Watch(ctx context.Context) chan *Info {
+func Watch(ctx context.Context) chan *Data {
 	err := clipboard.Init()
 	if err != nil {
 		panic(err)
 	}
 
-	c := make(chan *Info)
+	c := make(chan *Data)
 
-	go func(c chan *Info) {
+	go func(c chan *Data) {
 		var lastDigest string
 
 		watchTextChan := clipboard.Watch(ctx, clipboard.FmtText)
@@ -79,7 +79,7 @@ func Watch(ctx context.Context) chan *Info {
 			}
 			lastDigest = digest
 
-			c <- &Info{
+			c <- &Data{
 				Kind:   kind,
 				Data:   data,
 				Digest: digest,
@@ -90,29 +90,29 @@ func Watch(ctx context.Context) chan *Info {
 	return c
 }
 
-func WatchWithWrite(ctx context.Context) (in chan *Info, out chan *Info) {
-	in = make(chan *Info)
-	out = make(chan *Info)
-	go func(in, out chan *Info) {
+func WatchWithWrite(ctx context.Context) (in chan *Data, out chan *Data) {
+	in = make(chan *Data)
+	out = make(chan *Data)
+	go func(in, out chan *Data) {
 		var lastDigest string
 		var ok bool
-		var info *Info
+		var data *Data
 		watchChan := Watch(ctx)
 		for {
 			select {
-			case info, ok = <-watchChan:
+			case data, ok = <-watchChan:
 				if !ok {
 					return
 				}
-				digest := info.Digest
+				digest := data.Digest
 				if digest == lastDigest {
 					continue
 				}
 				lastDigest = digest
-				out <- info
-			case info = <-in:
-				lastDigest = info.Digest
-				Write(info)
+				out <- data
+			case data = <-in:
+				lastDigest = data.Digest
+				Write(data)
 			}
 		}
 	}(in, out)
@@ -126,11 +126,16 @@ func calcDigest(kind Kind, data []byte) string {
 	return base64.RawURLEncoding.EncodeToString(h.Sum(nil))
 }
 
-func Write(info *Info) {
-	if info.Kind.ClipboardFormat() == -1 {
+func WriteRaw(kind Kind, data []byte) {
+	format := kind.ClipboardFormat()
+	if format == -1 {
 		return
 	}
-	clipboard.Write(info.Kind.ClipboardFormat(), info.Data)
+	clipboard.Write(format, data)
+}
+
+func Write(data *Data) {
+	WriteRaw(data.Kind, data.Data)
 }
 
 func ReadRaw() (Kind, []byte) {
@@ -149,12 +154,12 @@ func ReadRaw() (Kind, []byte) {
 	return KindNone, nil
 }
 
-func Read() *Info {
+func Read() *Data {
 	kind, data := ReadRaw()
 	if kind == KindNone {
 		return nil
 	}
-	return &Info{
+	return &Data{
 		Data:   data,
 		Digest: calcDigest(kind, data),
 		Kind:   kind,
