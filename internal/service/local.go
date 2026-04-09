@@ -47,7 +47,7 @@ func (l *Local) Ready() <-chan struct{} {
 }
 
 func (l *Local) LocalChange(data *clipboard.Data) {
-	log.Printf("[INFO] ✏️ local changed %s", data.Digest)
+	log.Printf("[INFO] ✏️ local change %s", data.Digest)
 	meta := l.sync.LocalChange(data.Digest)
 	l.cache.Put(data)
 	l.PushToRemote(data, meta)
@@ -79,7 +79,7 @@ func (l *Local) RecvMeta(meta *sync.Meta) bool {
 	if !ok {
 		return false
 	}
-	log.Printf("[INFO] 📡 receive meta  %s", meta.Digest)
+	log.Printf("[INFO] 📡 receive meta %s", meta.Digest)
 	data := l.cache.Get(meta.Digest)
 	if data == nil {
 		return true
@@ -99,7 +99,7 @@ func (l *Local) RecvData(data *clipboard.Data) {
 	if meta == nil {
 		return
 	}
-	log.Printf("[INFO] 📥 receive data  %s", meta.Digest)
+	log.Printf("[INFO] 📥 receive data %s", meta.Digest)
 	// data在更新列中存在，写入缓存，写入剪贴板，推送给所有peer
 	l.cache.Put(data)
 	l.WriteToClipboard(data)
