@@ -9,17 +9,37 @@ import (
 )
 
 type Client struct {
-	addr   string
+	addr   *net.TCPAddr
 	key    []byte
 	client *rpc.Client
 	lock   sync.Mutex
 }
 
-func NewClient(addr string, key []byte) *Client {
-	return &Client{
-		addr: addr,
-		key:  key,
+func NewClient(addr string, key []byte) (*Client, error) {
+	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
+	if err != nil {
+		return nil, err
 	}
+	return &Client{
+		addr: tcpAddr,
+		key:  key,
+	}, nil
+}
+
+func NewClients(addrs []string, key []byte) ([]*Client, error) {
+	var clients []*Client
+	for _, v := range addrs {
+		client, err := NewClient(v, key)
+		if err != nil {
+			return nil, err
+		}
+		clients = append(clients, client)
+	}
+	return clients, nil
+}
+
+func (c *Client) Addr() net.Addr {
+	return c.addr
 }
 
 func (c *Client) getClient() (*rpc.Client, error) {
@@ -29,10 +49,11 @@ func (c *Client) getClient() (*rpc.Client, error) {
 	if c.client != nil {
 		return c.client, nil
 	}
-	conn, err := net.Dial("tcp", c.addr)
+	tcpConn, err := net.DialTCP(c.addr.Network(), nil, c.addr)
 	if err != nil {
 		return nil, err
 	}
+	conn := net.Conn(tcpConn)
 	if c.key != nil {
 		conn = enc.NewEncConn(conn, c.key)
 	}
@@ -59,4 +80,15 @@ func (c *Client) Call(serviceMethod string, args any, reply any) error {
 		}
 	}
 	return err
+}
+
+func (c *Client) Close() error {
+	c.lock.Lock()
+	client := c.client
+	c.client = nil
+	c.lock.Unlock()
+	if client != nil {
+		return client.Close()
+	}
+	return nil
 }

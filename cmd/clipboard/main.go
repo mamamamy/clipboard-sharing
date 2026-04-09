@@ -1,111 +1,71 @@
 package main
 
 import (
-	"bytes"
-	"clipboard/internal/clipboard"
 	"clipboard/internal/config"
 	"clipboard/internal/rpc"
 	"clipboard/internal/service"
 	"context"
-	"log"
 	"os"
+	"os/signal"
+	"sync"
+	"syscall"
 
 	"golang.org/x/crypto/argon2"
 )
 
+func NewKey(password string) []byte {
+	return argon2.IDKey(
+		[]byte(password),
+		[]byte("clipboard-sharing-service"),
+		3,
+		64*1024,
+		4,
+		32,
+	)
+}
+
 func main() {
-	var err error
-
-	log.SetOutput(os.Stdout)
-
 	cfg, err := config.Load("config.json")
 	if err != nil {
-		log.Fatalf("❌ failed to load config: %v", err)
+		panic(err)
 	}
-
-	key := argon2.IDKey([]byte(cfg.Password), []byte("clipboard-sharing"), 3, 64*1024, 4, 32)
-
-	rpcServer := rpc.NewServer(cfg.Bind, key)
-	err = rpcServer.Register(&service.RPCClipboardService{})
+	key := NewKey(cfg.Password)
+	localService, err := service.NewLocal(cfg.Peers, key)
 	if err != nil {
-		log.Fatalf("❌ failed to register RPC service: %v", err)
+		panic(err)
+	}
+	rpcServer, err := rpc.NewServer(cfg.Bind, key)
+	if err != nil {
+		panic(err)
+	}
+	err = rpcServer.Register(service.NewRPC(localService))
+	if err != nil {
+		panic(err)
 	}
 
+	wg := sync.WaitGroup{}
+	wg.Add(2)
+	ctx, stop := context.WithCancel(context.Background())
 	go func() {
-		log.Printf("🚀 RPC server starting, listen on: %s", rpcServer.Addr())
+		localService.Start(ctx)
+		wg.Done()
+	}()
+	<-localService.Ready()
+	go func() {
 		err := rpcServer.ListenAndServe()
 		if err != nil {
-			log.Fatalf("❌ RPC server stopped with error: %v", err)
+			panic(err)
 		}
+		wg.Done()
 	}()
 
-	rpcClient := rpc.NewClient(cfg.Peer, key)
-	go func() {
-		log.Printf("🚀 start watching remote clipboard change peer: %s", cfg.Peer)
-		for {
-			digest, err := service.RemoteClipboardService.WaitLatestDigest(rpcClient)
-			if err != nil {
-				log.Printf("❌ failed to wait remote latest digest: %v", err)
-				continue
-			}
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
 
-			log.Printf("📡 received remote clipboard digest: %s", digest)
+	stop()
+	localService.Stop()
+	_ = rpcServer.Close()
 
-			go func() {
-				localDigest := service.LocalClipboardService.GetDigest()
-				if bytes.Equal(digest, localDigest) {
-					log.Println("ℹ️ remote clipboard is consistent with local, no sync required")
-					return
-				}
-
-				log.Println("🔄 remote clipboard changed, starting sync...")
-				info, err := service.RemoteClipboardService.CompareAndGetInfo(rpcClient, localDigest)
-				if err != nil {
-					log.Printf("❌ failed to get remote clipboard info: %v", err)
-					return
-				}
-
-				if info.Kind == clipboard.KindNone {
-					log.Println("ℹ️ remote clipboard is consistent with local, no sync required")
-					return
-				} else if info.Kind != clipboard.KindNone {
-					clipboard.Write(info)
-					log.Printf(
-						"✅ successfully synced remote clipboard to local, kind: %s, size: %d, digest: %s",
-						info.Kind,
-						len(info.Data),
-						info.Digest,
-					)
-				}
-			}()
-		}
-	}()
-
-	watchChan := clipboard.Watch(context.Background())
-	log.Println("🚀 start watching clipboard...")
-
-	for {
-		select {
-		case info, ok := <-watchChan:
-			if !ok {
-				log.Println("🛑 stop watching clipboard: channel closed")
-				return
-			}
-			log.Printf(
-				"📋 local clipboard changed, kind: %s, size: %d, digest: %s",
-				info.Kind,
-				len(info.Data),
-				info.Digest,
-			)
-			service.LocalClipboardService.SetInfo(info)
-			go func() {
-				log.Println("📡 start pushing clipboard to remote...")
-				err := service.RemoteClipboardService.PushInfo(rpcClient, info)
-				if err != nil {
-					log.Printf("❌ failed to push clipboard to remote: %v", err)
-				}
-				log.Println("✅ successfully pushed clipboard to remote")
-			}()
-		}
-	}
+	wg.Wait()
 }

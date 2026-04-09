@@ -1,7 +1,6 @@
 package clipboard
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
@@ -9,12 +8,6 @@ import (
 
 	"golang.design/x/clipboard"
 )
-
-type Digest []byte
-
-func (d Digest) String() string {
-	return base64.RawURLEncoding.EncodeToString(d)
-}
 
 type Kind string
 
@@ -34,34 +27,38 @@ const (
 	KindText  Kind = "TEXT"
 )
 
-type Info struct {
+type Data struct {
 	Kind   Kind
 	Data   []byte
-	Digest Digest
+	Digest string
 }
 
-func Watch(ctx context.Context) chan *Info {
+func (d *Data) CalcDigest() string {
+	d.Digest = calcDigest(d.Kind, d.Data)
+	return d.Digest
+}
+
+func Watch(ctx context.Context) chan *Data {
 	err := clipboard.Init()
 	if err != nil {
 		panic(err)
 	}
 
-	watchTextChan := clipboard.Watch(ctx, clipboard.FmtText)
-	watchImageChan := clipboard.Watch(ctx, clipboard.FmtImage)
+	c := make(chan *Data)
 
-	c := make(chan *Info)
+	go func(c chan *Data) {
+		var lastDigest string
 
-	go func(chan *Info) {
-		var latestDigest Digest
-		h := sha256.New()
+		watchTextChan := clipboard.Watch(ctx, clipboard.FmtText)
+		watchImageChan := clipboard.Watch(ctx, clipboard.FmtImage)
 
 		for {
 			var kind Kind
 			var data []byte
 
 			select {
-			case <-time.After(1 * time.Second):
-				kind, data = Read()
+			case <-time.After(200 * time.Millisecond):
+				kind, data = ReadRaw()
 			case data = <-watchTextChan:
 				kind = KindText
 			case data = <-watchImageChan:
@@ -71,30 +68,77 @@ func Watch(ctx context.Context) chan *Info {
 				return
 			}
 
-			h.Reset()
-			h.Write(data)
-			digest := h.Sum(nil)
-
-			if bytes.Equal(digest, latestDigest) {
+			if kind == KindNone {
 				continue
 			}
-			latestDigest = digest
 
-			c <- &Info{
+			digest := calcDigest(kind, data)
+
+			if digest == lastDigest {
+				continue
+			}
+			lastDigest = digest
+
+			c <- &Data{
 				Kind:   kind,
 				Data:   data,
 				Digest: digest,
 			}
 		}
 	}(c)
+
 	return c
 }
 
-func Write(info *Info) {
-	clipboard.Write(info.Kind.ClipboardFormat(), info.Data)
+func WatchWithWrite(ctx context.Context) (in chan *Data, out chan *Data) {
+	in = make(chan *Data)
+	out = make(chan *Data)
+	go func(in, out chan *Data) {
+		var lastDigest string
+		var ok bool
+		var data *Data
+		watchChan := Watch(ctx)
+		for {
+			select {
+			case data, ok = <-watchChan:
+				if !ok {
+					return
+				}
+				digest := data.Digest
+				if digest == lastDigest {
+					continue
+				}
+				lastDigest = digest
+				out <- data
+			case data = <-in:
+				lastDigest = data.Digest
+				Write(data)
+			}
+		}
+	}(in, out)
+	return in, out
 }
 
-func Read() (Kind, []byte) {
+func calcDigest(kind Kind, data []byte) string {
+	h := sha256.New()
+	h.Write([]byte(kind))
+	h.Write(data)
+	return base64.RawURLEncoding.EncodeToString(h.Sum(nil))
+}
+
+func WriteRaw(kind Kind, data []byte) {
+	format := kind.ClipboardFormat()
+	if format == -1 {
+		return
+	}
+	clipboard.Write(format, data)
+}
+
+func Write(data *Data) {
+	WriteRaw(data.Kind, data.Data)
+}
+
+func ReadRaw() (Kind, []byte) {
 	var data []byte
 
 	data = clipboard.Read(clipboard.FmtText)
@@ -108,4 +152,16 @@ func Read() (Kind, []byte) {
 	}
 
 	return KindNone, nil
+}
+
+func Read() *Data {
+	kind, data := ReadRaw()
+	if kind == KindNone {
+		return nil
+	}
+	return &Data{
+		Data:   data,
+		Digest: calcDigest(kind, data),
+		Kind:   kind,
+	}
 }

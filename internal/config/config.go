@@ -6,9 +6,9 @@ import (
 )
 
 type Config struct {
-	Bind     string `json:"Bind"`
-	Peer     string `json:"Peer"`
-	Password string `json:"Password"`
+	Bind     string   `json:"Bind"`
+	Peers    []string `json:"Peers"`
+	Password string   `json:"Password"`
 }
 
 func Load(name string) (*Config, error) {

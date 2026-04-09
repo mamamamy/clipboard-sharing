@@ -14,21 +14,6 @@ type aesInstance struct {
 	nonce atomic.Uint64
 }
 
-func newAESInstance() (Instance, error) {
-	key := make([]byte, 32)
-	_, err := rand.Read(key)
-	if err != nil {
-		return nil, err
-	}
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return nil, err
-	}
-	return &aesInstance{
-		block: block,
-	}, nil
-}
-
 func (i *aesInstance) NewReader() io.Reader {
 	nonce := i.nonce.Add(1)
 	iv := make([]byte, 16)
@@ -45,4 +30,19 @@ type aesReader struct {
 func (r *aesReader) Read(p []byte) (n int, err error) {
 	r.s.XORKeyStream(p, p)
 	return len(p), nil
+}
+
+func newAESInstance() (Instance, error) {
+	key := make([]byte, 32)
+	_, err := rand.Read(key)
+	if err != nil {
+		return nil, err
+	}
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
+	}
+	return &aesInstance{
+		block: block,
+	}, nil
 }
