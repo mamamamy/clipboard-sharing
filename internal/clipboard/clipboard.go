@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
-	"time"
 
 	"golang.design/x/clipboard"
 )
@@ -57,8 +56,6 @@ func Watch(ctx context.Context) chan *Data {
 			var data []byte
 
 			select {
-			case <-time.After(200 * time.Millisecond):
-				kind, data = ReadRaw()
 			case data = <-watchTextChan:
 				kind = KindText
 			case data = <-watchImageChan:
