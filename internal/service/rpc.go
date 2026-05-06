@@ -31,7 +31,11 @@ func (r *RPC) WaitLatestMeta(_ struct{}, meta *sync.Meta) error {
 }
 
 func (r *RPC) LatestMeta(_ struct{}, meta *sync.Meta) error {
-	*meta = *r.local.LatestMeta()
+	m := r.local.LatestMeta()
+	if m == nil {
+		return nil
+	}
+	*meta = *m
 	return nil
 }
 
