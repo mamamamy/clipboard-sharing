@@ -51,11 +51,16 @@ func Watch(ctx context.Context) chan *Data {
 		watchTextChan := clipboard.Watch(ctx, clipboard.FmtText)
 		watchImageChan := clipboard.Watch(ctx, clipboard.FmtImage)
 
+		first := make(chan struct{}, 1)
+		first <- struct{}{}
+
 		for {
 			var kind Kind
 			var data []byte
 
 			select {
+			case <-first:
+				kind, data = ReadRaw()
 			case data = <-watchTextChan:
 				kind = KindText
 			case data = <-watchImageChan:
@@ -149,16 +154,4 @@ func ReadRaw() (Kind, []byte) {
 	}
 
 	return KindNone, nil
-}
-
-func Read() *Data {
-	kind, data := ReadRaw()
-	if kind == KindNone {
-		return nil
-	}
-	return &Data{
-		Data:   data,
-		Digest: calcDigest(kind, data),
-		Kind:   kind,
-	}
 }

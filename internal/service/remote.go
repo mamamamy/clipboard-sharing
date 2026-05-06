@@ -11,6 +11,7 @@ const (
 	RPCPushMeta       = RPCName + ".PushMeta"
 	RPCPushData       = RPCName + ".PushData"
 	RPCWaitLatestMeta = RPCName + ".WaitLatestMeta"
+	RPCLatestMeta     = RPCName + ".LatestMeta"
 	RPCPullData       = RPCName + ".PullData"
 )
 
@@ -30,6 +31,12 @@ func (r *Remote) PushData(client *rpc.Client, data *clipboard.Data) {
 func (r *Remote) WaitLatestMeta(client *rpc.Client) (*sync.Meta, error) {
 	var meta sync.Meta
 	err := client.Call(RPCWaitLatestMeta, struct{}{}, &meta)
+	return &meta, err
+}
+
+func (r *Remote) LatestMeta(client *rpc.Client) (*sync.Meta, error) {
+	var meta sync.Meta
+	err := client.Call(RPCLatestMeta, struct{}{}, &meta)
 	return &meta, err
 }
 

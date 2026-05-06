@@ -75,6 +75,12 @@ func (m *Manager) WaitLatestMeta() *Meta {
 	return m.latest
 }
 
+func (m *Manager) LatestMeta() *Meta {
+	m.notify.L.Lock()
+	defer m.notify.L.Unlock()
+	return m.latest
+}
+
 func NewManager() *Manager {
 	m := &Manager{}
 	m.notify.Cond = sync.NewCond(m.lock.RLocker())

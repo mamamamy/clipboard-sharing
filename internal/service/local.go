@@ -114,6 +114,10 @@ func (l *Local) WaitLatestMeta() *sync.Meta {
 	return l.sync.WaitLatestMeta()
 }
 
+func (l *Local) LatestMeta() *sync.Meta {
+	return l.sync.LatestMeta()
+}
+
 func (l *Local) PullData(digest string) *clipboard.Data {
 	return l.cache.Get(digest)
 }
@@ -124,31 +128,37 @@ func (l *Local) StartWaitRemoteChange() {
 			sleep := func() {
 				time.Sleep(1 * time.Second)
 			}
+
+			do := func(f func(client *rpc.Client) (*sync.Meta, error)) {
+				meta, err := f(client)
+				if err != nil {
+					sleep()
+					return
+				}
+				// 同对端主动推送逻辑
+				ok := l.RecvMeta(meta)
+				if !ok {
+					return
+				}
+				// ok == true，需要拉取数据
+				data, err := l.remote.PullData(client, meta.Digest)
+				if err != nil {
+					sleep()
+					return
+				}
+				// 同对端主动推送数据逻辑
+				l.RecvData(data)
+			}
+
+			do(l.remote.LatestMeta)
+
 			for {
 				select {
 				case <-l.ctx.Done():
 					return
 				default:
 				}
-				// 等待对端最新的元信息
-				meta, err := l.remote.WaitLatestMeta(client)
-				if err != nil {
-					sleep()
-					continue
-				}
-				// 同对端主动推送逻辑
-				ok := l.RecvMeta(meta)
-				if !ok {
-					continue
-				}
-				// ok == true，需要拉取数据
-				data, err := l.remote.PullData(client, meta.Digest)
-				if err != nil {
-					sleep()
-					continue
-				}
-				// 同对端主动推送数据逻辑
-				l.RecvData(data)
+				do(l.remote.WaitLatestMeta)
 			}
 		}(client)
 	}

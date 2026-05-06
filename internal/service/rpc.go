@@ -30,6 +30,11 @@ func (r *RPC) WaitLatestMeta(_ struct{}, meta *sync.Meta) error {
 	return nil
 }
 
+func (r *RPC) LatestMeta(_ struct{}, meta *sync.Meta) error {
+	*meta = *r.local.LatestMeta()
+	return nil
+}
+
 func (r *RPC) PullData(digest string, data *clipboard.Data) error {
 	*data = *r.local.PullData(digest)
 	return nil
